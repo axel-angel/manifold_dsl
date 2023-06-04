@@ -53,7 +53,10 @@ class Object(N):
     def __init__(self, template=None, **overrides):
         super().__init__(
                 **{# defaults
+                   'function': None,
+                   'args': {},
                    'transformations': [],
+                   'children': [],
                    # template and overrides
                    **(vars(template) if template else {}),
                    **overrides})
@@ -78,8 +81,19 @@ class Object(N):
                                for sign, min_, max_ in zip(signs, *self.bbox) ])
 
 
+# TODO: add $fa, $fs, $fn
+# TODO: store geometric description/points list so we can compute bbox with arbitrary transformations
+# can compute position of points or face, build stuff on it, relative to it, etc
+def Sphere(*args, orient='', d=1, **kwargs):
+    o = (Object(function='sphere',
+                args=dict(d=d),
+                bbox=np.array((3*(-d/2,), 3*(d/2,))))
+         .orient(orient))
+    return o
+
+
 def Cube(*args, orient='', size=None, **kwargs):
-    o = (Object(geometry='cube',
+    o = (Object(function='cube',
                 bbox=np.array(((0, 0, 0), (1, 1, 1))))
          .orient(orient))
     if size: o = smart_call(o.scale, size)
@@ -91,8 +105,48 @@ def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, **kwargs):
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
     max_d = max(d1, d2)
-    o = (Object(geometry='cylinder',
-                constructor_args=dict(h=h, d1=d1, d2=d2), # ensure uniform
+    o = (Object(function='cylinder',
+                args=dict(h=h, d1=d1, d2=d2),
                 bbox=np.array(((-max_d/2, -max_d/2, 0), (max_d/2, max_d/2, h))))
          .orient(orient))
     return o
+
+
+# TODO: add operators: union, difference, etc
+# idea: use Object so we can group objects and apply transforms to all of them?
+# also useful to reorient that group (computing bbox recursively)
+def union(*objects): return Object(function='union', children=objects)
+def difference(*objects): return Object(function='difference', children=objects)
+def intersection(*objects): return Object(function='intersection', children=objects)
+def hull(*objects): return Object(function='hull', children=objects)
+def minkowski(*objects): return Object(function='minkowski', children=objects)
+
+
+def to_scad_(object, ident=True):
+    ts = object.transformations
+    if len(ts) > 0:
+        (t_name, args) = ts[-1]
+        # openscad wrap in reverse order (last operation first)
+        return to_scad_(Object(function=t_name, args=args, children=[Object(object, transformations=ts[:-1])]))
+
+    args = object.args
+    if type(args) is dict:
+        args_str = ', '.join(( f'{k} = {v}' for k,v in object.args.items() ))
+    else:
+        args_str = '['+ ', '.join(map(str, args)) + ']'
+    xs = [f'{object.function}({args_str})']
+    if (cnt := len(object.children)) > 0:
+        if cnt > 1: xs.append('{')
+        for o in object.children:
+            xs.extend(to_scad_(o))
+        if cnt > 1: xs.append('}')
+    else:
+        xs[-1] += ';'
+
+    # let's add the current indent of course
+    ident_str = '  ' if ident else ''
+    return [ f'{ident_str}{x}' for x in xs ]
+
+def to_scad(object):
+    # TODO: force $fn to a reasonable value for now
+    return '\n'.join( ['$fn=20;'] + to_scad_(object, ident=False) )
