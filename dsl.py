@@ -1,7 +1,10 @@
 #!/usr/bin/python
 
+import numpy as np
 from types import SimpleNamespace as N
 
+def first(*args):
+    return next(( a for a in args if a is not None ), None)
 
 def select_keys(d, keys):
     return { k:v for k in keys if k in d }
@@ -16,30 +19,34 @@ def smart_call(f, x):
         return f(x)
 
 def vector3(v=(0,0,0),
-            x=0, y=0, z=0,
-            xy=0, xz=0, yz=0):
+            x=None, y=None, z=None,
+            xy=None, xz=None, yz=None):
     if type(v) in {int, float}:
         v = (v, v, v) # uniform
     # otherwise assume v is vector
-    return (v[0] + (x or xy or xz),
-            v[1] + (y or xy or yz),
-            v[2] + (z or xz or yz))
+    return (v[0] + first(x, xy, xz, 0),
+            v[1] + first(y, xy, yz, 0),
+            v[2] + first(z, xz, yz, 0))
 
 
 # parse strings to specify orientation, eg: +xy, +x-z, by default =xyz means centered
- # = means centered, +/- towards positive/negative respectively
-orient_signs = { '=': -0.5, '+': 0, '-': -1} # unit offset to orient a certain way
-def orient_to_offset(s):
+# = means centered, +/- towards positive/negative respectively
+def parse_orient(s):
+    signs = dict(x=0, y=0, z=0) # default is centered
     sign = +1
-    orient = dict(x=-0.5, y=-0.5, z=-0.5) # default is centered
     for x in s:
-        if (s := orient_signs.get(x, None)) != None: # is it a sign symbol?
+        if (s := {'=':0, '+':+1, '-':-1}.get(x, None)) != None: # sign symbol
             sign = s
-        elif x in 'xyz': # is it a coordinate?
-            orient[x] = sign
+        elif x in 'xyz': # coordinate symbol
+            signs[x] = sign
         else:
             raise Exception(f'Invalid symbol {x}')
-    return orient
+    return tuple(( signs[c] for c in 'xyz' ))
+
+def compute_orient(sign, min_, max_):
+    if   sign  > 0: return -min(min_, max_)
+    elif sign == 0: return -(max_ + min_)/2
+    else          : return -max(min_, max_)
 
 
 class Object(N):
@@ -52,6 +59,7 @@ class Object(N):
                    **overrides})
 
     def transform(self, type, *args, **kwargs):
+        # TODO: recompute bbox
         v = vector3(*args, **kwargs)
         return Object(self, transformations=self.transformations+[(type, v)])
 
@@ -65,13 +73,26 @@ class Object(N):
         return self.transform('scale', *args, **kwargs)
 
     def orient(self, s=''):
-        # TODO: we suppose object has unitary dimensions xyz
-        offset = orient_to_offset(s)
-        return self.translate(**{ k: offset[k] for k in 'xyz' })
+        signs = parse_orient(s)
+        return self.translate([ compute_orient(sign, min_, max_)
+                               for sign, min_, max_ in zip(signs, *self.bbox) ])
 
 
-def Cube(*args, orient='', scale=None, **kwargs):
-    o = Object(geometry='cube').orient(orient)
-    if scale:
-        o = smart_call(o.scale, scale)
+def Cube(*args, orient='', size=None, **kwargs):
+    o = (Object(geometry='cube',
+                bbox=np.array(((0, 0, 0), (1, 1, 1))))
+         .orient(orient))
+    if size: o = smart_call(o.scale, size)
+    return o
+
+
+def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, **kwargs):
+    h = first(h, 1)
+    d1 = first(d1, d, 1)
+    d2 = first(d2, d, 1)
+    max_d = max(d1, d2)
+    o = (Object(geometry='cylinder',
+                constructor_args=dict(h=h, d1=d1, d2=d2), # ensure uniform
+                bbox=np.array(((-max_d/2, -max_d/2, 0), (max_d/2, max_d/2, h))))
+         .orient(orient))
     return o
