@@ -15,12 +15,13 @@ def stack(sign, axes, *objects):
     return reduce(lambda a,b: (a.orient(rsign+axes) + b.orient(sign+axes)), objects)
 
 x = stack('+', 'z',
-        Cube(2),
-        Cube(4),
-        Cube(1),
+        Cube(2).rotate(z=45),
+        Cube(4).rotate(x=60),
+        stack('+', 'x', Cube(1), Cube(4), Sphere(fn=25)),
         Cylinder(h=10, d1=1, d2=10),
+        Cylinder(h=3, d1=10, d2=5),
         Cube(3),
-        ).orient()
+).orient()
 
 to_stl('out2.stl', x)
 

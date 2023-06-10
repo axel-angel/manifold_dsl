@@ -65,7 +65,8 @@ class Solid():
     def __sub__(s, t): return Solid(s.manifold - t.manifold)
     def __xor__(s, t): return Solid(s.manifold ^ t.manifold)
 
-    bounding_box = property(lambda s: s.manifold.bounding_box)
+    bounding_box = property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
+    center = property(lambda s: s.bounding_box.mean(axis=0))
     edges = property(lambda s: s.manifold.num_edge())
     triangles = property(lambda s: s.manifold.num_tri())
     vertices = property(lambda s: s.manifold.num_vert())
@@ -97,11 +98,11 @@ class Solid():
     def scale(s, *args, **kwargs):
         return Solid(s.manifold.scale(vector3(*args, **kwargs)))
 
-    def orient(s, orient=''):
+    def orient(s, orient='', at=(0,0,0)):
         signs = parse_orient(orient)
-        bbox = np.array(s.manifold.bounding_box).reshape((2,3))
-        return s.translate([ compute_orient(sign, min_, max_)
-                            for sign, min_, max_ in zip(signs, *bbox) ])
+        at = smart_call(vector3, at)
+        return s.translate([ v + compute_orient(sign, min_, max_)
+                            for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
 
 # transmutate proxy for methods returning Solid (wrap returned type)
 # -- class methods
