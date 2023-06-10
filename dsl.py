@@ -1,7 +1,12 @@
 #!/usr/bin/python
 
-import numpy as np
+import pymanifold, numpy as np, trimesh
+from trimesh import Trimesh
+from trimesh.exchange.export import export_mesh
 from types import SimpleNamespace as N
+from functools import reduce
+import operator as ops
+from collections.abc import Iterable
 
 def first(*args):
     return next(( a for a in args if a is not None ), None)
@@ -49,104 +54,105 @@ def compute_orient(sign, min_, max_):
     else          : return -max(min_, max_)
 
 
-class Object(N):
-    def __init__(self, template=None, **overrides):
-        super().__init__(
-                **{# defaults
-                   'function': None,
-                   'args': {},
-                   'transformations': [],
-                   'children': [],
-                   # template and overrides
-                   **(vars(template) if template else {}),
-                   **overrides})
+class Solid():
+    def __init__(s, other=None):
+        s.manifold = other or pymanifold.Manifold()
 
-    def transform(self, type, *args, **kwargs):
-        # TODO: recompute bbox
-        v = vector3(*args, **kwargs)
-        return Object(self, transformations=self.transformations+[(type, v)])
+    # expose wrapped methods
+    def to_mesh(s): return s.manifold.to_mesh()
+    def as_original(s): return Solid(s.manifold.as_original())
+    def __add__(s, t): return Solid(s.manifold + t.manifold)
+    def __sub__(s, t): return Solid(s.manifold - t.manifold)
+    def __xor__(s, t): return Solid(s.manifold ^ t.manifold)
 
-    def translate(self, *args, **kwargs):
-        return self.transform('translate', *args, **kwargs)
+    bounding_box = property(lambda s: s.manifold.bounding_box)
+    edges = property(lambda s: s.manifold.num_edge())
+    triangles = property(lambda s: s.manifold.num_tri())
+    vertices = property(lambda s: s.manifold.num_vert())
+    genus = property(lambda s: s.manifold.genus())
+    area = property(lambda s: s.manifold.get_surface_area())
+    volume = property(lambda s: s.manifold.get_volume())
+    is_empty = property(lambda s: s.manifold.is_empty())
+    rounding_error = property(lambda s: s.manifold.precision())
 
-    def rotate(self, *args, **kwargs):
-        return self.transform('rotate', *args, **kwargs)
-
-    def scale(self, *args, **kwargs):
-        return self.transform('scale', *args, **kwargs)
-
-    def orient(self, s=''):
-        signs = parse_orient(s)
-        return self.translate([ compute_orient(sign, min_, max_)
-                               for sign, min_, max_ in zip(signs, *self.bbox) ])
-
-
-# TODO: add $fa, $fs, $fn
-# TODO: store geometric description/points list so we can compute bbox with arbitrary transformations
-# can compute position of points or face, build stuff on it, relative to it, etc
-def Sphere(*args, orient='', d=1, **kwargs):
-    o = (Object(function='sphere',
-                args=dict(d=d),
-                bbox=np.array((3*(-d/2,), 3*(d/2,))))
-         .orient(orient))
-    return o
+    # TODO: implement
+    decompose = NotImplemented
+    compose = NotImplemented
+    split = NotImplemented
+    split_by_plane = NotImplemented
+    trim_by_plane = NotImplemented
+    transform = NotImplemented
+    warp = NotImplemented
+    mirror = NotImplemented
+    refine = NotImplemented
 
 
-def Cube(*args, orient='', size=None, **kwargs):
-    o = (Object(function='cube',
-                bbox=np.array(((0, 0, 0), (1, 1, 1))))
-         .orient(orient))
-    if size: o = smart_call(o.scale, size)
-    return o
+    # methods with extended features
+    def translate(s, *args, **kwargs):
+        return Solid(s.manifold.translate(vector3(*args, **kwargs)))
+
+    def rotate(s, *args, **kwargs):
+        return Solid(s.manifold.rotate(vector3(*args, **kwargs)))
+
+    def scale(s, *args, **kwargs):
+        return Solid(s.manifold.scale(vector3(*args, **kwargs)))
+
+    def orient(s, orient=''):
+        signs = parse_orient(orient)
+        bbox = np.array(s.manifold.bounding_box).reshape((2,3))
+        return s.translate([ compute_orient(sign, min_, max_)
+                            for sign, min_, max_ in zip(signs, *bbox) ])
+
+# transmutate proxy for methods returning Solid (wrap returned type)
+# -- class methods
+for n in 'cube tetrahedron cylinder sphere smooth from_mesh'.split():
+    (lambda n:
+     setattr(Solid, n,
+             lambda *args, **kwargs: Solid(getattr(pymanifold.Manifold, n)(*args, **kwargs))))(n)
 
 
-def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, **kwargs):
+# TODO: implement 'Surface' or 'Plane' corresponding to pymanifold.CrossSection
+
+
+def Cube(size=1, orient=''):
+    return (Solid
+            .cube(smart_call(vector3, size))
+            .orient(orient))
+
+def Sphere(*args, orient='', d=1, fn=0, **kwargs):
+    return (Solid
+            .sphere(d, circular_segments=fn)
+            .orient(orient))
+
+
+def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, fn=0):
     h = first(h, 1)
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
-    max_d = max(d1, d2)
-    o = (Object(function='cylinder',
-                args=dict(h=h, d1=d1, d2=d2),
-                bbox=np.array(((-max_d/2, -max_d/2, 0), (max_d/2, max_d/2, h))))
-         .orient(orient))
-    return o
+    return (Solid
+            .cylinder(h, d1, d2, circular_segments=fn)
+            .orient(orient))
 
 
-# TODO: add operators: union, difference, etc
-# idea: use Object so we can group objects and apply transforms to all of them?
-# also useful to reorient that group (computing bbox recursively)
-def union(*objects): return Object(function='union', children=objects)
-def difference(*objects): return Object(function='difference', children=objects)
-def intersection(*objects): return Object(function='intersection', children=objects)
-def hull(*objects): return Object(function='hull', children=objects)
-def minkowski(*objects): return Object(function='minkowski', children=objects)
+# allows operator to accepts varargs or single parameter (list or object)
+def operator_varargs(f):
+    def f2(*args):
+        if len(args) == 1:
+            if isinstance(args[0], Iterable):
+                return f(args[0])
+            else:
+                return args[0] # operator doesn't do anything with single argument, simplify
+        else:
+            return f(args) # unpack varargs to 1 list arg
+    return f2
 
 
-def to_scad_(object, ident=True):
-    ts = object.transformations
-    if len(ts) > 0:
-        (t_name, args) = ts[-1]
-        # openscad wrap in reverse order (last operation first)
-        return to_scad_(Object(function=t_name, args=args, children=[Object(object, transformations=ts[:-1])]))
+union = operator_varargs(lambda objects: reduce(ops.add, objects))
+difference = operator_varargs(lambda objects: reduce(ops.sub, objects))
+intersection = operator_varargs(lambda objects: reduce(ops.xor, objects))
 
-    args = object.args
-    if type(args) is dict:
-        args_str = ', '.join(( f'{k} = {v}' for k,v in object.args.items() ))
-    else:
-        args_str = '['+ ', '.join(map(str, args)) + ']'
-    xs = [f'{object.function}({args_str})']
-    if (cnt := len(object.children)) > 0:
-        if cnt > 1: xs.append('{')
-        for o in object.children:
-            xs.extend(to_scad_(o))
-        if cnt > 1: xs.append('}')
-    else:
-        xs[-1] += ';'
 
-    # let's add the current indent of course
-    ident_str = '  ' if ident else ''
-    return [ f'{ident_str}{x}' for x in xs ]
-
-def to_scad(object):
-    # TODO: force $fn to a reasonable value for now
-    return '\n'.join( ['$fn=20;'] + to_scad_(object, ident=False) )
+def to_stl(fout, manifold):
+    mesh = manifold.to_mesh()
+    return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
+                       fout, 'stl')
