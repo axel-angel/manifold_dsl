@@ -119,9 +119,9 @@ def Cube(size=1, orient=''):
             .cube(smart_call(vector3, size))
             .orient(orient))
 
-def Sphere(*args, orient='', d=1, fn=0, **kwargs):
+def Sphere(*args, orient='', d=1, fn=0):
     return (Solid
-            .sphere(d, circular_segments=fn)
+            .sphere(d/2, circular_segments=fn)
             .orient(orient))
 
 
@@ -130,7 +130,7 @@ def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, fn=0):
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
     return (Solid
-            .cylinder(h, d1, d2, circular_segments=fn)
+            .cylinder(h, d1/2, d2/2, circular_segments=fn)
             .orient(orient))
 
 
