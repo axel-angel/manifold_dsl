@@ -58,13 +58,26 @@ class Solid():
     def __init__(s, other=None):
         s.manifold = other or pymanifold.Manifold()
 
-    # expose wrapped methods
+    # expose Manifold methods
+    def from_mesh(m): return pymanifold.Manifold.from_mesh(m)
     def to_mesh(s): return s.manifold.to_mesh()
     def as_original(s): return Solid(s.manifold.as_original())
     def __add__(s, t): return Solid(s.manifold + t.manifold)
     def __sub__(s, t): return Solid(s.manifold - t.manifold)
     def __xor__(s, t): return Solid(s.manifold ^ t.manifold)
 
+    # some handy tools
+    def from_vertices(vertices, faces): # vertices=positions/points and faces=triangle indices
+        m = pymanifold.Mesh(vertices.astype(np.float32),
+                            faces.astype(np.int32),
+                            # FIXME: Manifold forces Python binding to send arrays here
+                            np.empty(shape=(0,0)), np.empty(shape=(0,0)))
+        return Solid.from_mesh(m)
+
+    # TODO: make bounding_box a Manifold.Cube instead, more useful that way
+    # TODO: then implement getters for positions of edges, vertices, faces, faces
+    # then we can do relative placement to other objects/edges/vertices: left of X, etc
+    # expose Manifold properties
     bounding_box = property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
     center = property(lambda s: s.bounding_box.mean(axis=0))
     edges = property(lambda s: s.manifold.num_edge())
@@ -87,7 +100,6 @@ class Solid():
     mirror = NotImplemented
     refine = NotImplemented
 
-
     # methods with extended features
     def translate(s, *args, **kwargs):
         return Solid(s.manifold.translate(vector3(*args, **kwargs)))
@@ -104,6 +116,8 @@ class Solid():
         return s.translate([ v + compute_orient(sign, min_, max_)
                             for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
 
+
+# we aren't done yet, we have plenty of other static methods to expose:
 # transmutate proxy for methods returning Solid (wrap returned type)
 # -- class methods
 for n in 'cube tetrahedron cylinder sphere smooth from_mesh'.split():
@@ -112,21 +126,20 @@ for n in 'cube tetrahedron cylinder sphere smooth from_mesh'.split():
              lambda *args, **kwargs: Solid(getattr(pymanifold.Manifold, n)(*args, **kwargs))))(n)
 
 
+# nice shorthands to create most objects with extra goodies
 # TODO: implement 'Surface' or 'Plane' corresponding to pymanifold.CrossSection
-
 
 def Cube(size=1, orient=''):
     return (Solid
             .cube(smart_call(vector3, size))
             .orient(orient))
 
-def Sphere(*args, orient='', d=1, fn=0):
+def Sphere(d=1, fn=0, orient=''):
     return (Solid
             .sphere(d/2, circular_segments=fn)
             .orient(orient))
 
-
-def Cylinder(*args, orient='', h=None, d=None, d1=None, d2=None, fn=0):
+def Cylinder(h=None, d=None, d1=None, d2=None, fn=0, orient=''):
     h = first(h, 1)
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
@@ -148,11 +161,13 @@ def operator_varargs(f):
     return f2
 
 
+# operators
 union = operator_varargs(lambda objects: reduce(ops.add, objects))
 difference = operator_varargs(lambda objects: reduce(ops.sub, objects))
 intersection = operator_varargs(lambda objects: reduce(ops.xor, objects))
 
 
+# export to file
 def to_stl(fout, manifold):
     mesh = manifold.to_mesh()
     return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
