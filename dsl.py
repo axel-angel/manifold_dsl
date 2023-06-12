@@ -5,8 +5,9 @@ from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh
 from types import SimpleNamespace as N
 from functools import reduce
-import operator as ops
+from operator import add, sub, xor
 from collections.abc import Iterable
+import operators
 
 def first(*args):
     return next(( a for a in args if a is not None ), None)
@@ -162,9 +163,14 @@ def operator_varargs(f):
 
 
 # operators
-union = operator_varargs(lambda objects: reduce(ops.add, objects))
-difference = operator_varargs(lambda objects: reduce(ops.sub, objects))
-intersection = operator_varargs(lambda objects: reduce(ops.xor, objects))
+union = operator_varargs(lambda objects: reduce(add, objects))
+difference = operator_varargs(lambda objects: reduce(sub, objects))
+intersection = operator_varargs(lambda objects: reduce(xor, objects))
+
+def hull(*args):
+    m = union(*args).to_mesh()
+    vertices, faces = operators.hull(m.vert_pos)
+    return Solid.from_vertices(vertices, faces)
 
 
 # export to file
