@@ -102,7 +102,6 @@ class Solid():
     trim_by_plane = NotImplemented
     transform = NotImplemented
     warp = NotImplemented
-    mirror = NotImplemented
     refine = NotImplemented
 
     # methods with extended features
@@ -114,6 +113,9 @@ class Solid():
 
     def scale(s, *args, **kwargs):
         return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1)))
+
+    def mirror(s, *args, **kwargs):
+        return Solid(s.manifold.mirror(vector3(*args, **kwargs)))
 
     def orient(s, orient='', at=(0,0,0)):
         signs = parse_orient(orient)
@@ -180,6 +182,17 @@ def hull(*args):
     m = union(*args).to_mesh()
     vertices, faces = operators.hull(m.vert_pos)
     return Solid.from_vertices(vertices, faces)
+
+# allows to place objects next to/on top of each other (see orient)
+def stack(orient):
+    rsign_map = {'+':'-', '-':'+'}
+    def go(objects):
+        sign = orient[0]
+        axes = orient[1:]
+        rsign = rsign_map[sign]
+        # TODO: instead of using orient repeatdly(=translation=increas errors), can orient one per object with relative positioning to last object bbox
+        return reduce(lambda a,b: (a.orient(rsign+axes) + b.orient(sign+axes)), objects)
+    return operator_varargs(go)
 
 
 # export to file
