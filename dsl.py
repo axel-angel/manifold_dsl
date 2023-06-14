@@ -26,13 +26,15 @@ def smart_call(f, x):
 
 def vector3(v=(0,0,0),
             x=None, y=None, z=None,
-            xy=None, xz=None, yz=None):
+            xy=None, xz=None, yz=None,
+            xyz=None,
+            default=0):
     if type(v) in {int, float}:
         v = (v, v, v) # uniform
     # otherwise assume v is vector
-    return (v[0] + first(x, xy, xz, 0),
-            v[1] + first(y, xy, yz, 0),
-            v[2] + first(z, xz, yz, 0))
+    return (v[0] + first(x, xy, xz, xyz, default),
+            v[1] + first(y, xy, yz, xyz, default),
+            v[2] + first(z, xz, yz, xyz, default))
 
 
 # parse strings to specify orientation, eg: +xy, +x-z, by default =xyz means centered
@@ -109,7 +111,7 @@ class Solid():
         return Solid(s.manifold.rotate(vector3(*args, **kwargs)))
 
     def scale(s, *args, **kwargs):
-        return Solid(s.manifold.scale(vector3(*args, **kwargs)))
+        return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1)))
 
     def orient(s, orient='', at=(0,0,0)):
         signs = parse_orient(orient)
