@@ -21,11 +21,11 @@ def hull(vertices):
 
     # compute actual normals implied by face order
     cross = np.cross(xs0 - xs1,
-                     xs2 - xs0)
+                     xs2 - xs1)
 
     # check which normals are pointing outward correctly or inward incorrectly
     outward = xs1 - center
-    corrects = (cross * xs1).sum(axis=1) < 0
+    corrects = (cross * outward).sum(axis=1) < 0
 
     # final faces with all outward correct normals
     faces = np.concatenate((# those faces are already corrects
