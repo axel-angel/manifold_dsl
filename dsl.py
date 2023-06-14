@@ -58,6 +58,8 @@ def compute_orient(sign, min_, max_):
 
 
 class Solid():
+    fn = 0 # TODO: is this a good idea?
+
     def __init__(s, other=None):
         s.manifold = other or pymanifold.Manifold()
 
@@ -70,7 +72,7 @@ class Solid():
     def __xor__(s, t): return Solid(s.manifold ^ t.manifold)
 
     # some handy tools
-    def from_vertices(vertices, faces): # vertices=positions/points and faces=triangle indices
+    def from_vertices(vertices, faces): # vertices=positions/points and faces=points indices
         m = pymanifold.Mesh(vertices.astype(np.float32),
                             faces.astype(np.int32),
                             # FIXME: Manifold forces Python binding to send arrays here
@@ -137,17 +139,22 @@ def Cube(size=1, orient=''):
             .cube(smart_call(vector3, size))
             .orient(orient))
 
-def Sphere(d=1, fn=0, orient=''):
+def Sphere(d=1, fn=None, orient=''):
     return (Solid
-            .sphere(d/2, circular_segments=fn)
+            .sphere(d/2, circular_segments=fn or Solid.fn)
             .orient(orient))
 
-def Cylinder(h=None, d=None, d1=None, d2=None, fn=0, orient=''):
+def Cylinder(h=None, d=None, d1=None, d2=None, fn=Solid.fn or Solid.fn, orient=''):
     h = first(h, 1)
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
     return (Solid
-            .cylinder(h, d1/2, d2/2, circular_segments=fn)
+            .cylinder(h, d1/2, d2/2, circular_segments=fn or Solid.fn)
+            .orient(orient))
+
+def Tetrahedron(orient=''):
+    return (Solid
+            .tetrahedron()
             .orient(orient))
 
 
