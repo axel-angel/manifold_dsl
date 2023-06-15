@@ -37,9 +37,17 @@ def vector3(v=(0,0,0),
             combiner(v[2], first(z, xz, yz, xyz, default)))
 
 
+def parse_orient(x):
+    if type(x) == str:
+        return parse_orient_str(x)
+    if isinstance(x, Iterable): # assume it's 3 coordinates
+        return x
+    else:
+        raise Exception("Cannot handle orientation of type {type(x)}")
+
 # parse strings to specify orientation, eg: +xy, +x-z, by default =xyz means centered
 # = means centered, +/- towards positive/negative respectively
-def parse_orient(s):
+def parse_orient_str(s):
     signs = dict(x=0, y=0, z=0) # default is centered
     sign = +1
     for x in s:
@@ -52,9 +60,9 @@ def parse_orient(s):
     return tuple(( signs[c] for c in 'xyz' ))
 
 def compute_orient(sign, min_, max_):
-    if   sign  > 0: return -min(min_, max_)
-    elif sign == 0: return -(max_ + min_)/2
-    else          : return -max(min_, max_)
+    if   sign  < 0: return min(min_, max_)
+    elif sign == 0: return (max_ + min_)/2
+    else          : return max(min_, max_)
 
 
 class Solid():
@@ -80,7 +88,6 @@ class Solid():
         return Solid.from_mesh(m)
 
     bounding_box = property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
-    center = property(lambda s: s.bounding_box.mean(axis=0))
     # TODO: implement getters for orient-specific edge/triangle/vertex?
     edge_count = cached_property(lambda s: s.manifold.num_edge())
     triangle_count = cached_property(lambda s: s.manifold.num_tri())
@@ -119,8 +126,10 @@ class Solid():
     def orient(s, orient='', at=(0,0,0)):
         signs = parse_orient(orient)
         at = smart_call(vector3, at)
-        return s.translate([ v + compute_orient(sign, min_, max_)
+        return s.translate([ v - compute_orient(-1*sign, min_, max_)
                             for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
+    def center(s, at=(0,0,0)):
+        return s.orient(at=at)
 
 
 # we aren't done yet, we have plenty of other static methods to expose:
