@@ -5,7 +5,7 @@ from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh
 from types import SimpleNamespace as N
 from functools import reduce
-from operator import add, sub, xor
+from operator import add, sub, xor, mul as multiply
 from collections.abc import Iterable
 import operators
 
@@ -28,13 +28,13 @@ def vector3(v=(0,0,0),
             x=None, y=None, z=None,
             xy=None, xz=None, yz=None,
             xyz=None,
-            default=0):
+            default=0, combiner=add):
     if type(v) in {int, float}:
         v = (v, v, v) # uniform
     # otherwise assume v is vector
-    return (v[0] + first(x, xy, xz, xyz, default),
-            v[1] + first(y, xy, yz, xyz, default),
-            v[2] + first(z, xz, yz, xyz, default))
+    return (combiner(v[0], first(x, xy, xz, xyz, default)),
+            combiner(v[1], first(y, xy, yz, xyz, default)),
+            combiner(v[2], first(z, xz, yz, xyz, default)))
 
 
 # parse strings to specify orientation, eg: +xy, +x-z, by default =xyz means centered
@@ -112,7 +112,7 @@ class Solid():
         return Solid(s.manifold.rotate(vector3(*args, **kwargs)))
 
     def scale(s, *args, **kwargs):
-        return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1)))
+        return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1, combiner=multiply)))
 
     def mirror(s, *args, **kwargs):
         return Solid(s.manifold.mirror(vector3(*args, **kwargs)))
