@@ -5,7 +5,7 @@ from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh
 from types import SimpleNamespace as N
 from functools import reduce, cached_property
-from operator import add, sub, xor, mul as multiply
+from operator import add, sub, and_, mul as multiply
 from collections.abc import Iterable
 from numpy.linalg import norm
 import operators
@@ -78,7 +78,7 @@ class Solid():
     def as_original(s): return Solid(s.manifold.as_original())
     def __add__(s, t): return Solid(s.manifold + t.manifold)
     def __sub__(s, t): return Solid(s.manifold - t.manifold)
-    def __xor__(s, t): return Solid(s.manifold ^ t.manifold)
+    def __and__(s, t): return Solid(s.manifold ^ t.manifold) # now & (and), originally ^ (xor)
 
     # some handy tools
     def from_vertices(vertices, faces): # vertices=positions/points and faces=points indices
@@ -140,6 +140,11 @@ class Solid():
         return np.array([ compute_orient(sign, min_, max_)
                          for sign, min_, max_ in zip(signs, *s.bounding_box) ])
 
+    def stick_to(s, other, orient=''):
+        e = other.extent(orient)
+        return s.orient(orient, at=e)
+
+
     # TODO: then implement getters for positions of edges, vertices, faces, faces
     # then we can do relative placement to other objects/edges/vertices: left of X, etc
     # expose Manifold properties
@@ -156,7 +161,7 @@ class Solid():
         r = norm(s.to_mesh().vert_pos - c, axis=1).max()
         return Sphere(2*r, fn=fn or Solid.fn).translate(c)
 
-    # fit bbox, not the shape! s.fit_bounding(Sphere()) != s.bounding_sphere()
+    # fit bbox of s to other, not the shape! s.fit_bounding(Sphere()) != s.bounding_sphere()
     def fit_bounding_box(s, other):
         bb_self = s.bounding_box
         bb_other = other.bounding_box
@@ -219,22 +224,17 @@ def operator_varargs(f):
 # operators
 union = operator_varargs(lambda objects: reduce(add, objects))
 difference = operator_varargs(lambda objects: reduce(sub, objects))
-intersection = operator_varargs(lambda objects: reduce(xor, objects))
+intersection = operator_varargs(lambda objects: reduce(and_, objects))
 
 def hull(*args):
     m = union(*args).to_mesh()
     vertices, faces = operators.hull(m.vert_pos)
     return Solid.from_vertices(vertices, faces)
 
-# allows to place objects next to/on top of each other (see orient)
+# allows to place objects next to/on top of each other (see stick_to)
 def stack(orient):
-    rsign_map = {'+':'-', '-':'+'}
     def go(objects):
-        sign = orient[0]
-        axes = orient[1:]
-        rsign = rsign_map[sign]
-        # TODO: instead of using orient repeatdly(=translation=increasing errors), can orient one per object with relative positioning to last object bbox
-        return reduce(lambda a,b: (a.orient(rsign+axes) + b.orient(sign+axes)), objects)
+        return reduce(lambda a,b: (a + b.stick_to(a, orient=orient)), objects)
     return operator_varargs(go)
 
 
