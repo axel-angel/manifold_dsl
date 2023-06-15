@@ -7,6 +7,7 @@ from types import SimpleNamespace as N
 from functools import reduce, cached_property
 from operator import add, sub, xor, mul as multiply
 from collections.abc import Iterable
+from numpy.linalg import norm
 import operators
 
 def first(*args):
@@ -87,7 +88,6 @@ class Solid():
                             np.empty(shape=(0,0)), np.empty(shape=(0,0)))
         return Solid.from_mesh(m)
 
-    bounding_box = property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
     # TODO: implement getters for orient-specific edge/triangle/vertex?
     edge_count = cached_property(lambda s: s.manifold.num_edge())
     triangle_count = cached_property(lambda s: s.manifold.num_tri())
@@ -131,8 +131,44 @@ class Solid():
     def center(s, at=(0,0,0)):
         return s.orient(at=at)
 
+    # this returns the min and max points in 3D
+    bounding_box = cached_property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
+    center_point = cached_property(lambda s: s.bounding_box.mean(axis=0))
+    # return the point on the bounding box that satisfying the given orientation
+    def extent(s, orient=''): # default to the center, yes an exception: it's inside actually
+        signs = parse_orient(orient)
+        return np.array([ compute_orient(sign, min_, max_)
+                         for sign, min_, max_ in zip(signs, *s.bounding_box) ])
 
-# we aren't done yet, we have plenty of other static methods to expose:
+    # TODO: then implement getters for positions of edges, vertices, faces, faces
+    # then we can do relative placement to other objects/edges/vertices: left of X, etc
+    # expose Manifold properties
+    def bounding_cube(s):
+        bb_self = s.bounding_box
+        center_self = bb_self.mean(axis=0)
+        size_self = bb_self[1] - bb_self[0]
+        return (Cube()
+                .scale(size_self)
+                .translate(center_self))
+
+    def bounding_sphere(s, fn=None):
+        c = s.center_point
+        r = norm(s.to_mesh().vert_pos - c, axis=1).max()
+        return Sphere(2*r, fn=fn or Solid.fn).translate(c)
+
+    # fit bbox, not the shape! s.fit_bounding(Sphere()) != s.bounding_sphere()
+    def fit_bounding_box(s, other):
+        bb_self = s.bounding_box
+        bb_other = other.bounding_box
+        size_self = bb_self[1] - bb_self[0]
+        size_other = bb_other[1] - bb_other[0]
+        return (other
+                .center() # recenter before scaling!
+                .scale(size_self / size_other)
+                .translate(s.center))
+
+
+# we aren't done yet, we have a few static methods to expose:
 # transmutate proxy for methods returning Solid (wrap returned type)
 for n in 'cube tetrahedron cylinder sphere smooth'.split():
     (lambda n:
@@ -197,13 +233,18 @@ def stack(orient):
         sign = orient[0]
         axes = orient[1:]
         rsign = rsign_map[sign]
-        # TODO: instead of using orient repeatdly(=translation=increas errors), can orient one per object with relative positioning to last object bbox
+        # TODO: instead of using orient repeatdly(=translation=increasing errors), can orient one per object with relative positioning to last object bbox
         return reduce(lambda a,b: (a.orient(rsign+axes) + b.orient(sign+axes)), objects)
     return operator_varargs(go)
 
 
 # export to file
-def to_stl(fout, manifold):
-    mesh = manifold.to_mesh()
+def to_stl(fout, s):
+    mesh = s.to_mesh()
     return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
                        fout, 'stl')
+
+def to_3mf(fout, s):
+    mesh = s.to_mesh()
+    return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
+                       fout, '3mf')
