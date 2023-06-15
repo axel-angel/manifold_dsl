@@ -4,7 +4,7 @@ import pymanifold, numpy as np, trimesh
 from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh
 from types import SimpleNamespace as N
-from functools import reduce
+from functools import reduce, cached_property
 from operator import add, sub, xor, mul as multiply
 from collections.abc import Iterable
 import operators
@@ -64,7 +64,7 @@ class Solid():
         s.manifold = other or pymanifold.Manifold()
 
     # expose Manifold methods
-    def from_mesh(m): return pymanifold.Manifold.from_mesh(m)
+    def from_mesh(m): return Solid(pymanifold.Manifold.from_mesh(m))
     def to_mesh(s): return s.manifold.to_mesh()
     def as_original(s): return Solid(s.manifold.as_original())
     def __add__(s, t): return Solid(s.manifold + t.manifold)
@@ -79,20 +79,19 @@ class Solid():
                             np.empty(shape=(0,0)), np.empty(shape=(0,0)))
         return Solid.from_mesh(m)
 
-    # TODO: make bounding_box a Manifold.Cube instead, more useful that way
-    # TODO: then implement getters for positions of edges, vertices, faces, faces
-    # then we can do relative placement to other objects/edges/vertices: left of X, etc
-    # expose Manifold properties
     bounding_box = property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
     center = property(lambda s: s.bounding_box.mean(axis=0))
-    edges = property(lambda s: s.manifold.num_edge())
-    triangles = property(lambda s: s.manifold.num_tri())
-    vertices = property(lambda s: s.manifold.num_vert())
-    genus = property(lambda s: s.manifold.genus())
-    area = property(lambda s: s.manifold.get_surface_area())
-    volume = property(lambda s: s.manifold.get_volume())
-    is_empty = property(lambda s: s.manifold.is_empty())
-    rounding_error = property(lambda s: s.manifold.precision())
+    # TODO: implement getters for orient-specific edge/triangle/vertex?
+    edge_count = cached_property(lambda s: s.manifold.num_edge())
+    triangle_count = cached_property(lambda s: s.manifold.num_tri())
+    vertex_count = cached_property(lambda s: s.manifold.num_vert())
+
+    # manifold geometric properties
+    genus = cached_property(lambda s: s.manifold.genus())
+    area = cached_property(lambda s: s.manifold.get_surface_area())
+    volume = cached_property(lambda s: s.manifold.get_volume())
+    is_empty = cached_property(lambda s: s.manifold.is_empty())
+    rounding_error = cached_property(lambda s: s.manifold.precision())
 
     # TODO: implement
     decompose = NotImplemented
@@ -126,8 +125,7 @@ class Solid():
 
 # we aren't done yet, we have plenty of other static methods to expose:
 # transmutate proxy for methods returning Solid (wrap returned type)
-# -- class methods
-for n in 'cube tetrahedron cylinder sphere smooth from_mesh'.split():
+for n in 'cube tetrahedron cylinder sphere smooth'.split():
     (lambda n:
      setattr(Solid, n,
              lambda *args, **kwargs: Solid(getattr(pymanifold.Manifold, n)(*args, **kwargs))))(n)
