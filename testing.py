@@ -3,29 +3,23 @@
 from dsl import *
 
 star = union(( Cube(size=1, orient=sign+axis )
-           for axis in 'xyz'
-           for sign in '+-' ))
+              for axis in 'xyz'
+              for sign in '+-' )).translate(x=5)
+to_stl('out.stl', star)
 
-to_stl('out.stl',
-       ((star.orient('+x') + Sphere(fn=100, orient='-x')).orient('+y')
-        + Cylinder(fn=10, orient='-y')))
 
-def stack(orient, *objects):
-    sign = orient[0]
-    axes = orient[1:]
-    rsign = {'+':'-', '-':'+'}[sign]
-    return reduce(lambda a,b: (a.orient(rsign+axes) + b.orient(sign+axes)), objects)
+bounder = star.bounding_sphere(fn=50)
+to_stl('out_bounding.stl', bounder)
 
-x = stack('+z',
-        Cube(2).rotate(z=45),
-        Cube(4).rotate(x=60),
-        stack('+x', Cube(1), Cube(4), Sphere(fn=25)),
-        Cylinder(h=10, d1=1, d2=10),
-        Cylinder(h=3, d1=10, d2=5),
-        Cube(3),
-).orient()
 
-to_stl('out2.stl', x)
+smooth_cube = hull(( (Sphere(d=0.5, fn=20)
+                      .orient(-1*np.array((x,y,z))) # ensure we fit the unit cube
+                      .translate((x, y, z)))
+                    for x in (-1,+1)
+                    for y in (-1,+1)
+                    for z in (-1,+1)
+                    ))
+to_stl('smooth_cube.stl', smooth_cube)
 
 #x = (Cube(orient='+x')
 #     .translate(z=1),
