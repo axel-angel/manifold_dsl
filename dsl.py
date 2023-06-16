@@ -75,6 +75,9 @@ class Solid():
     # expose Manifold methods
     def from_mesh(m): return Solid(pymanifold.Manifold.from_mesh(m))
     def to_mesh(s): return s.manifold.to_mesh()
+    def to_trimesh(s, process=False):
+        m = s.to_mesh()
+        return Trimesh(vertices=m.vert_pos, faces=m.tri_verts, process=process)
     def as_original(s): return Solid(s.manifold.as_original())
     def __add__(s, t): return Solid(s.manifold + t.manifold)
     def __sub__(s, t): return Solid(s.manifold - t.manifold)
@@ -239,12 +242,5 @@ def stack(orient):
 
 
 # export to file
-def to_stl(fout, s):
-    mesh = s.to_mesh()
-    return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
-                       fout, 'stl')
-
-def to_3mf(fout, s):
-    mesh = s.to_mesh()
-    return export_mesh(Trimesh(vertices=mesh.vert_pos, faces=mesh.tri_verts, process=False),
-                       fout, '3mf')
+def to_stl(fout, s): return export_mesh(s.to_trimesh(), fout, 'stl')
+def to_3mf(fout, s): return export_mesh(s.to_trimesh(), fout, '3mf')
