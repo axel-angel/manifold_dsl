@@ -8,6 +8,7 @@ from functools import reduce, cached_property
 from operator import add, sub, and_, mul as multiply
 from collections.abc import Iterable
 from numpy.linalg import norm
+from math import pi, cos
 import operators
 
 def first(*args):
@@ -246,6 +247,23 @@ def stack(orient):
     def go(objects):
         return reduce(lambda a,b: (a + b.stick_to(a, orient=orient)), objects)
     return operator_varargs(go)
+
+# TODO: maybe move utils functions into own namespace, eg: spacing
+def split(end=1, count=2):
+    return np.linspace(0, end, count)
+def intervals(interval=1, count=2, skip_start=False, skip_end=False):
+    return np.linspace(interval if skip_start else 0, interval*count, count,
+                       endpoint=not skip_end)
+def spanning(interval=1, extent=1, skip_start=False, skip_end=False):
+    return np.arange(interval if skip_start else 0,
+                     extent if skip_end else extent+interval,
+                     interval)
+
+def grid(s, x=(0,), y=(0,), z=(0,)):
+    return union(( s.translate((x_, y_, z_))
+                  for x_ in x
+                  for y_ in y
+                  for z_ in z ))
 
 
 # export to file
