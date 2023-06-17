@@ -25,12 +25,15 @@ def smart_call(f, x):
     else:
         return f(x)
 
-def vector3(v=(0,0,0),
+# TODO: can we return np array here?
+def vector3(v=None,
             x=None, y=None, z=None,
             xy=None, xz=None, yz=None,
             xyz=None,
             default=0, combiner=add):
-    if type(v) in {int, float}:
+    if v is None:
+        v = (default, default, default)
+    elif type(v) in {int, float}:
         v = (v, v, v) # uniform
     # otherwise assume v is vector
     return (combiner(v[0], first(x, xy, xz, xyz, default)),
@@ -197,13 +200,17 @@ def Sphere(d=1, fn=None, orient=''):
             .sphere(d/2, circular_segments=fn or Solid.fn)
             .orient(orient))
 
-def Cylinder(h=None, d=None, d1=None, d2=None, fn=Solid.fn or Solid.fn, orient=''):
-    h = first(h, 1)
+def Cylinder(h=1, d=None, d1=None, d2=None, fn=Solid.fn or Solid.fn, orient=''):
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
     return (Solid
             .cylinder(h, d1/2, d2/2, circular_segments=fn or Solid.fn)
             .orient(orient))
+
+# TODO: is this useful? validate formula works
+def Prism(faces=3, h=1, d_flat=1, orient=''): # useful to make hex nuts/sockets (faces=6)
+    d = d_flat/2 / cos(pi / faces)
+    return Cylinder(h=h, d=d, fn=faces, orient=orient)
 
 def Tetrahedron(orient=''):
     return (Solid
