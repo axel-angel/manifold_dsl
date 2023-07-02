@@ -24,8 +24,13 @@ smooth_cube = hull(( (rounder
                     ))
 to_stl('smooth_cube.stl', smooth_cube)
 
+buttons = grid(x=intervals(2, count=3), z=split(10, 5))(
+        Cube().rotate(x=45)
+    )
+to_stl('buttons.stl', buttons)
+
 #x = (Cube(orient='+x')
 #     .translate(z=1),
 #     .rotate(x=45)
-#     .place(top_of=base.edges('-z'))
+#     .next_to(base, '-z')
 #     )
