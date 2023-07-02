@@ -37,6 +37,7 @@ def vector3(v=None,
         v = (default, default, default)
     elif type(v) in {int, float}:
         v = (v, v, v) # uniform
+    assert len(v) == 3
     # otherwise assume v is vector
     return (combiner(v[0], first(x, xy, xz, xyz, default)),
             combiner(v[1], first(y, xy, yz, xyz, default)),
@@ -103,6 +104,14 @@ class Solid():
     triangle_count = cached_property(lambda s: s.manifold.num_tri())
     vertex_count = cached_property(lambda s: s.manifold.num_vert())
 
+    def vertex(s, orient=''):
+        signs = parse_orient(orient)
+        v = vector3(signs) # it points to the direction we want
+        vs = s.to_mesh().vert_pos
+        d = ((vs - s.center_point) * v).sum(axis=1)
+        idx = np.argmax(d)
+        return vs[idx]
+
     # manifold geometric properties
     genus = cached_property(lambda s: s.manifold.genus())
     area = cached_property(lambda s: s.manifold.get_surface_area())
@@ -131,15 +140,23 @@ class Solid():
         return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1, combiner=multiply)))
 
     def mirror(s, *args, **kwargs):
+        # TODO: manifold mirror acts weird with >1 axes?
         return Solid(s.manifold.mirror(vector3(*args, **kwargs)))
 
+    # TODO: we need a way to keep some axes intact, untouched!
     def orient(s, orient='', at=(0,0,0)):
         signs = parse_orient(orient)
         at = smart_call(vector3, at)
         return s.translate([ v - compute_orient(-1*sign, min_, max_)
                             for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
-    def center(s, at=(0,0,0)):
-        return s.orient(at=at)
+    # TODO: can we refacor with orient?
+    # center object s only for the given axes in orient and at given position
+    def center(s, orient='xyz', at=(0,0,0)):
+        signs = parse_orient(orient)
+        at = smart_call(vector3, at)
+        return s.translate([ v - (max_ + min_)/2 if sign != 0
+                            else 0
+                            for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
 
     # this returns the min and max points in 3D
     bounding_box = cached_property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
@@ -150,9 +167,29 @@ class Solid():
         return np.array([ compute_orient(sign, min_, max_)
                          for sign, min_, max_ in zip(signs, *s.bounding_box) ])
 
+    # return s placed after other in direction described by orient
+    # TODO: can we replace stick_to by next_to, including for stack()?
     def stick_to(s, other, orient=''):
         e = other.extent(orient)
         return s.orient(orient, at=e)
+    # same as stick_to but doesn't orient/touch axes not present in orient
+    def next_to(s, other, orient=''):
+        e = other.extent(orient)
+        signs = parse_orient(orient)
+        d = [ v - compute_orient(-1*sign, min_, max_) if sign != 0
+             else 0
+             for v, sign, min_, max_ in zip(e, signs, *s.bounding_box) ]
+        return s.translate(d)
+    # align object s to overlap other only on the given axes
+    # TODO: can we refactor this with next_to?
+    def overlap_with(s, other, orient=''):
+        orient = parse_orient(orient)
+        e = other.extent([ -1*v for v in orient ]) # we need opposite side
+        signs = parse_orient(orient)
+        d = [ v - compute_orient(-1*sign, min_, max_) if sign != 0
+             else 0
+             for v, sign, min_, max_ in zip(e, signs, *s.bounding_box) ]
+        return s.translate(d)
 
 
     # TODO: then implement getters for positions of edges, vertices, faces, faces
@@ -172,7 +209,7 @@ class Solid():
         return Sphere(2*r, fn=fn or Solid.fn).translate(c)
 
     # fit bbox of s to other, not the shape! s.fit_bounding(Sphere()) != s.bounding_sphere()
-    def fit_bounding_box(s, other):
+    def fit_bounding_box(s, other): # TODO: is this useful?
         bb_self = s.bounding_box
         bb_other = other.bounding_box
         size_self = bb_self[1] - bb_self[0]
@@ -252,21 +289,23 @@ def stack(orient):
     return operator_varargs(go)
 
 # TODO: maybe move utils functions into own namespace, eg: spacing
-def split(end=1, count=2):
-    return np.linspace(0, end, count)
+def split(end=1, count=2, start=0, margin=0):
+    return np.linspace(start+margin, end-margin, count)
 def intervals(interval=1, count=2, skip_start=False, skip_end=False):
-    return np.linspace(interval if skip_start else 0, interval*count, count,
+    return np.linspace(interval if skip_start else 0, interval*(count-1), count,
                        endpoint=not skip_end)
 def spanning(interval=1, extent=1, skip_start=False, skip_end=False):
     return np.arange(interval if skip_start else 0,
                      extent if skip_end else extent+interval,
                      interval)
 
-def grid(s, x=(0,), y=(0,), z=(0,)):
-    return union(( s.translate((x_, y_, z_))
-                  for x_ in x
-                  for y_ in y
-                  for z_ in z ))
+def grid(x=(0,), y=(0,), z=(0,)):
+    def go(s):
+        return union(( s.translate((x_, y_, z_))
+                      for x_ in x
+                      for y_ in y
+                      for z_ in z ))
+    return go
 
 
 # export to file
