@@ -2,7 +2,8 @@
 
 import pymanifold, numpy as np, trimesh
 from trimesh import Trimesh
-from trimesh.exchange.export import export_mesh
+from trimesh.exchange.export import export_mesh as trimesh_export
+from trimesh.exchange.load import load as trimesh_load
 from types import SimpleNamespace as N
 from functools import reduce, cached_property
 from operator import add, sub, and_, mul as multiply
@@ -78,7 +79,9 @@ class Solid():
 
     # expose Manifold methods
     def from_mesh(m): return Solid(pymanifold.Manifold.from_mesh(m))
-    def to_mesh(s): return s.manifold.to_mesh()
+    def from_trimesh(m): return Solid.from_vertices(m.vertices, m.faces)
+    def from_stl(path): return Solid.from_trimesh(trimesh_load(path))
+    def to_mesh(s): return s.manifold.to_mesh() # TODO: maybe cache if possible?
     def to_trimesh(s, process=False):
         m = s.to_mesh()
         return Trimesh(vertices=m.vert_pos, faces=m.tri_verts, process=process)
@@ -267,5 +270,5 @@ def grid(s, x=(0,), y=(0,), z=(0,)):
 
 
 # export to file
-def to_stl(fout, s): return export_mesh(s.to_trimesh(), fout, 'stl')
-def to_3mf(fout, s): return export_mesh(s.to_trimesh(), fout, '3mf')
+def to_stl(fout, s): return trimesh_export(s.to_trimesh(), fout, 'stl')
+def to_3mf(fout, s): return trimesh_export(s.to_trimesh(), fout, '3mf')
