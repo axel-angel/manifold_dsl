@@ -24,9 +24,9 @@ def svg_render_path(path: Path, inset=0, steps=3, closed=False):
     return V([ (pt.real, pt.imag) for pt in pts ])
 
 def svg_thicken_path(profile: Path, width=1, steps=3):
-    return np.concatenate(
-                    svg_render_path(profile, steps=steps, inset=+1*width/2),
-            np.flip(svg_render_path(profile, steps=steps, inset=-1*width/2), axis=0))
+    return np.concatenate((
+                    svg_render_path(profile, steps=steps, inset=+width/2),
+            np.flip(svg_render_path(profile, steps=steps, inset=-width/2), axis=0)))
 
 def polygon2d_to_3d(pts, z=0):
     xs,zs = pts[:,0], pts[:,1]
