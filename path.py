@@ -73,18 +73,19 @@ def sweep_path(polygon, along_pts, tangents=None, sweeped_pts=None, cyclic=False
     else:
         assert tangents.shape == along_pts.shape
         vs_mid = tangents
-    vs_midx, vs_midy, vs_midz = vs_mid[:,0], vs_mid[:,1], vs_mid[:,2]
-    yaws = -np.arcsin(vs_midx)
-    yaws = np.where(vs_midy >= 0, yaws, -np.sign(vs_midx) * np.pi - yaws) # get signed angle
-    pitches = np.arctan2(vs_midz, norm(vs_midx + vs_midy, axis=0)) # TODO: check if pitch is correct
-    # predict first and last tangents, this could be wrong or inaccurate
-    yaws = np.concatenate(([yaws[0] + (yaws[0]-yaws[1])],
-                           yaws,
-                           [yaws[-1] + (yaws[-1]-yaws[-2])]), axis=0)
-    pitches = np.concatenate(([pitches[0] + (pitches[0]-pitches[1])],
-                              pitches,
-                              [pitches[-1] + (pitches[-2]-pitches[-1])]), axis=0)
-    ss = V([ pt + Rotation.from_euler('xz', (pitch, yaw)).apply(sweeped_pts)
+    vs_midx, vs_midy, vs_midz = vs_mid.T
+    yaws = -np.sign(vs_midx) * np.arccos(vs_midy / norm(vs_mid[:,(0,1)], axis=1)) # get signed angles
+    pitches = np.arctan2(vs_midz, np.sqrt(vs_midx**2 + vs_midy**2))
+    if tangents is None:
+        # predict first and last tangents, this could be wrong or inaccurate
+        yaws = np.concatenate(([yaws[0] + (yaws[0]-yaws[1])],
+                               yaws,
+                               [yaws[-1] + (yaws[-1]-yaws[-2])]), axis=0)
+        pitches = np.concatenate(([pitches[0] + (pitches[0]-pitches[1])],
+                                  pitches,
+                                  [pitches[-1] + (pitches[-2]-pitches[-1])]), axis=0)
+    # TODO: fix pitch math
+    ss = V([ pt + Rotation.from_euler('z', yaw).apply(sweeped_pts)
             for pt, yaw, pitch in zip(along_pts, yaws, pitches) ])
 
     idxs = sweep_faces(polygon, ss, cyclic=cyclic)
