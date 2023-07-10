@@ -13,9 +13,12 @@ from .dsl import Solid
 
 # TODO: steps should depend on arc type + length to keep constant quality
 # TODO: fix issue with sharp corners
-def svg_render_path(path: Path, inset=0, steps=3, closed=False):
+def svg_render_path(path: Path, inset=0, steps=3, closed=None):
     pts = []
-    for x in path:
+    lastidx = None
+    if closed is None: closed = np.isclose(path[-1].length(), 0) # this would create an invalid manifold
+    if closed: lastidx = -1 # remove closing Line, we'll do it ourself
+    for x in path[:lastidx]:
         pts.extend(( x.point(t) + x.normal(t)*inset
                     # skip last point because it's part of the previous element
                     for t in list(np.linspace(0, 1, steps)[:-1]) ))
@@ -53,7 +56,7 @@ def sweep_faces(polygon, pts, cyclic=False):
                                V(idxs[-1]) % (segms*vertices)))
     else:
         # starting and ending faces
-        cap_idxs = triangulate(polygon, V([len(polygon)])).reshape(-1, 3).astype(np.uint32)
+        cap_idxs = triangulate(polygon, V([len(polygon)])).reshape(-1, 3)
         # putting everything together
         idxs = np.concatenate((*idxs, # all segments
                                cap_idxs, # start cap
