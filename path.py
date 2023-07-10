@@ -9,7 +9,7 @@ from shapely import Polygon
 from trimesh.creation import sweep_polygon
 from trimesh import unitize as normalize
 from mapbox_earcut import triangulate_float64 as triangulate
-from dsl import Solid
+from .dsl import Solid
 
 # TODO: steps should depend on arc type + length to keep constant quality
 # TODO: fix issue with sharp corners

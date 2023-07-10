@@ -10,7 +10,8 @@ from operator import add, sub, and_, mul as multiply
 from collections.abc import Iterable
 from numpy.linalg import norm
 from math import pi, cos
-import operators
+from . import operators
+import networkx
 
 def first(*args):
     return next(( a for a in args if a is not None ), None)
