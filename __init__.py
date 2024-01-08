@@ -1,2 +1,4 @@
 #!/usr/bin/python
-__all__ = ["dsl"]
+
+__version__ = 0.1
+from .dsl import *

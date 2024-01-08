@@ -4,6 +4,7 @@ import pymanifold, numpy as np, trimesh
 from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh as trimesh_export
 from trimesh.exchange.load import load as trimesh_load
+from trimesh import unitize as normalize
 from types import SimpleNamespace as N
 from functools import reduce, cached_property
 from operator import add, sub, and_, mul as multiply
@@ -72,6 +73,24 @@ def compute_orient(sign, min_, max_):
     elif sign == 0: return (max_ + min_)/2
     else          : return max(min_, max_)
 
+# an alternative without 0 to np.sign (avoids np.sign(0) = 0)
+def sign2(x): return np.where(x >= 0, +1, -1)
+
+def facing_rotation(v): # assuming v is normalized and original facing is upward z=1
+    vx, vy, vz = v
+    pitch = -np.arccos(vz)
+    vxy_norm = norm((vx, vy))
+    if np.isclose(vxy_norm, 0):
+        yaw = 0
+    else:
+        yaw = -sign2(vx) * np.arccos(vy / vxy_norm) # get signed angles
+
+    from scipy.spatial.transform import Rotation
+    rot = np.concatenate((Rotation.from_euler('xz', (pitch, yaw)).as_matrix(),
+                          ([0], [0], [0])), axis=1) # 4th column is translation component
+
+    return rot
+
 
 class Solid():
     fn = 0 # TODO: is this a good idea?
@@ -136,6 +155,12 @@ class Solid():
 
     def rotate(s, *args, **kwargs):
         return Solid(s.manifold.rotate(vector3(*args, **kwargs)))
+
+    # suppose object is facing upward z, will rotate toward given direction
+    def rotate_facing(s, *args, **kwargs):
+        v = normalize(vector3(*args, **kwargs))
+        m = facing_rotation(np.array(v))
+        return Solid(s.manifold.transform(m))
 
     def scale(s, *args, **kwargs):
         return Solid(s.manifold.scale(vector3(*args, **kwargs, default=1, combiner=multiply)))
