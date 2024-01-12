@@ -1,15 +1,15 @@
 #!/usr/bin/python
 
-import numpy as np
-from numpy import array as V
+from .dsl import Solid, sign2
 from numpy.linalg import norm
 from scipy.spatial.transform import Rotation
 from svgpathtools import Path
 from shapely import Polygon
-from trimesh.creation import sweep_polygon
 from trimesh import unitize as normalize
 from mapbox_earcut import triangulate_float64 as triangulate
-from .dsl import Solid
+from collections.abc import Iterable
+
+# svg and more complex stuff
 
 # TODO: steps should depend on arc type + length to keep constant quality
 # TODO: fix issue with sharp corners
@@ -90,19 +90,12 @@ def sweep_path(polygon, along_pts, tangents=None, sweeped_pts=None, cyclic=False
                                [yaws[-1] + (yaws[-1]-yaws[-2])]), axis=0)
         pitches = np.concatenate(([pitches[0] + (pitches[0]-pitches[1])],
                                   pitches,
-                                  [pitches[-1] + (pitches[-2]-pitches[-1])]), axis=0)
-    # TODO: fix pitch math
+                                  [pitches[-1] + (pitches[-1]-pitches[-2])]), axis=0)
+    #ss = V([ pt + Rotation.from_euler('xz', (pitch, yaw)).apply(sweeped_pts)
+    # TODO: fix pitch
     ss = V([ pt + Rotation.from_euler('z', yaw).apply(sweeped_pts)
             for pt, yaw, pitch in zip(along_pts, yaws, pitches) ])
 
     idxs = sweep_faces(polygon, ss, cyclic=cyclic)
 
     return Solid.from_vertices(ss.reshape(-1,3), idxs)
-
-
-def ellipse_2d(final_angle, dx=1, dy=1, start_angle=0, splits=20):
-    xs = np.linspace(start_angle, final_angle, splits)
-    return np.stack((dx/2 * np.cos(xs), dy/2 * np.sin(xs)), axis=1)
-
-def arc_2d(final_angle, d=1, start_angle=0, splits=20):
-    return ellipse_2d(final_angle, d, d, start_angle=start_angle, splits=splits)

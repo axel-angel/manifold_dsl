@@ -1,54 +1,23 @@
 #!/usr/bin/python
 
+from . import operators
+from .utils import *
+
 import pymanifold, numpy as np, trimesh
 from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh as trimesh_export
 from trimesh.exchange.load import load as trimesh_load
 from trimesh import unitize as normalize
-from types import SimpleNamespace as N
 from functools import reduce, cached_property
 from operator import add, sub, and_, mul as multiply
 from collections.abc import Iterable
 from numpy.linalg import norm
 from math import pi, cos
-from . import operators
 import networkx
 
-def first(*args):
-    return next(( a for a in args if a is not None ), None)
-
-def select_keys(d, keys):
-    return { k:v for k in keys if k in d }
-
-def smart_call(f, x):
-    t = type(x)
-    if t is dict:
-        return f(**x)
-    elif t is N:
-        return f(**vars(x))
-    else:
-        return f(x)
-
-# TODO: can we return np array here?
-def vector3(v=None,
-            x=None, y=None, z=None,
-            xy=None, xz=None, yz=None,
-            xyz=None,
-            default=0, combiner=add):
-    if v is None:
-        v = (default, default, default)
-    elif type(v) in {int, float}:
-        v = (v, v, v) # uniform
-    assert len(v) == 3
-    # otherwise assume v is vector
-    return (combiner(v[0], first(x, xy, xz, xyz, default)),
-            combiner(v[1], first(y, xy, yz, xyz, default)),
-            combiner(v[2], first(z, xz, yz, xyz, default)))
-
-
-def parse_orient(x):
+def parse_orient(x, dimensions=3):
     if type(x) == str:
-        return parse_orient_str(x)
+        return parse_orient_str(x, dimensions)
     if isinstance(x, Iterable): # assume it's 3 coordinates
         return x
     else:
@@ -56,9 +25,14 @@ def parse_orient(x):
 
 # parse strings to specify orientation, eg: +xy, +x-z, by default =xyz means centered
 # = means centered, +/- towards positive/negative respectively
-def parse_orient_str(s):
-    signs = dict(x=0, y=0, z=0) # default is centered
-    sign = +1
+def parse_orient_str(s, dimensions):
+    signs = dict()
+    assert 1 <= dimensions <= 3
+    # default is centered at 0
+    if dimensions >= 1: signs['x'] = 0
+    if dimensions >= 2: signs['y'] = 0
+    if dimensions >= 3: signs['z'] = 0
+    sign = +1 # default sign is positive
     for x in s:
         if (s := {'=':0, '+':+1, '-':-1}.get(x, None)) != None: # sign symbol
             sign = s
@@ -72,9 +46,6 @@ def compute_orient(sign, min_, max_):
     if   sign  < 0: return min(min_, max_)
     elif sign == 0: return (max_ + min_)/2
     else          : return max(min_, max_)
-
-# an alternative without 0 to np.sign (avoids np.sign(0) = 0)
-def sign2(x): return np.where(x >= 0, +1, -1)
 
 def facing_rotation(v): # assuming v is normalized and original facing is upward z=1
     vx, vy, vz = v
@@ -255,7 +226,6 @@ for n in 'cube tetrahedron cylinder sphere smooth'.split():
 
 
 # nice shorthands to create most objects with extra goodies
-# TODO: implement 'Surface' or 'Plane' corresponding to pymanifold.CrossSection
 
 def Cube(size=1, orient=''):
     return (Solid
@@ -267,6 +237,14 @@ def Sphere(d=1, fn=None, orient=''):
             .sphere(d/2, circular_segments=fn or Solid.fn)
             .orient(orient))
 
+# generalized Sphere scaled in xyz (a round blob)
+def Spheroid(size=1, fn=None, orient=''):
+    return (Solid
+            .sphere(0.5, circular_segments=fn or Solid.fn)
+            .scale(smart_call(vector3, size))
+            .orient(orient))
+
+# Cylinder with upper diameter d1, lower diameter d2
 def Cylinder(h=1, d=None, d1=None, d2=None, fn=Solid.fn or Solid.fn, orient=''):
     d1 = first(d1, d, 1)
     d2 = first(d2, d, 1)
@@ -274,9 +252,20 @@ def Cylinder(h=1, d=None, d1=None, d2=None, fn=Solid.fn or Solid.fn, orient=''):
             .cylinder(h, d1/2, d2/2, circular_segments=fn or Solid.fn)
             .orient(orient))
 
+# generalized Cylinder scaled in xyz (ellyptic cylinder)
+def Cylindric(size=1, fn=Solid.fn or Solid.fn, orient=''):
+    if isinstance(size, Iterable) and len(size) == 2:
+        scaler = (size[0], size[0], size[1]) # shorthand: (d, d, h)
+    else:
+        scaler = smart_call(vector3, size)
+    return (Solid
+            .cylinder(1, 1, 1, circular_segments=fn or Solid.fn)
+            .scale(scaler)
+            .orient(orient))
+
 # TODO: is this useful? validate formula works
 def Prism(faces=3, h=1, d_flat=1, orient=''): # useful to make hex nuts/sockets (faces=6)
-    d = d_flat/2 / cos(pi / faces)
+    d = d_flat / cos(pi / faces)
     return Cylinder(h=h, d=d, fn=faces, orient=orient)
 
 def Tetrahedron(orient=''):
