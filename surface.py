@@ -1,16 +1,40 @@
 #!/usr/bin/python
 
+import pymanifold
 from .utils import *
+from .dsl import Solid
 from functools import partial
 from trimesh import unitize as normalize
 from numpy.linalg import norm
 
+
+class Surface():
+    def __init__(s, other=None):
+        s.crosssection = other or pymanifold.CrossSection()
+
+    def from_points(points, *holes):
+        return Surface(pymanifold.CrossSection([points, *holes]))
+
+    def extrude(s, h):
+        return Solid(s.crosssection.extrude(h))
+
+    # TODO: add other methods
+
+
+# 2D now tracer pen
 # TODO: generalize to 3D
+# TODO: add nurbs, b-splines?
 class Tracer():
-    def __init__(s, origin=(0,0)):
-        s.points = []
-        x, y = smart_call(vector2, origin)
-        s.points.append((x,y))
+    def __init__(s, origin=None):
+        if origin is None:
+            s.points = []
+        else:
+            s.points = [(origin[0], origin[1])]
+
+    def from_points(points):
+        s = Tracer()
+        s.points = points
+        return s
 
     # relative move
     def rel(s, *args, **kwargs):
@@ -21,10 +45,15 @@ class Tracer():
 
     # absolute position (only specified components)
     def set(s, *args, **kwargs):
-        x0, y0 = s.points[-1]
         x, y = vector2(*args, **kwargs, default=None, combiner=lambda a,b: first(a, b))
-        if x is not None: x0 = x
-        if y is not None: y0 = y
+        if len(s.points) == 0:
+            if x is None or y is None:
+                raise Exception("No origin, hence all coordinates must be set")
+            x0, y0 = x, y
+        else:
+            x0, y0 = s.points[-1]
+            if x is not None: x0 = x
+            if y is not None: y0 = y
         s.points.append((x0, y0))
         return s
 
@@ -36,22 +65,26 @@ class Tracer():
         s.points.append((x, y))
         return s
 
-    def round(s, rounded, splits=10):
-        s.points = round_path(s.points, rounded, splits=splits)
-        return s
+    def smoothed(s, rounded, splits=10, cyclic=True):
+        return Tracer.from_points(smooth_path(s.points, rounded, splits=splits, cyclic=cyclic))
 
-    # TODO: def to_surface
+    def to_surface(s):
+        return Surface.from_points(s.points)
 
 # replace each vertex by a rounded arc
 # TODO: add support for cyclic shape
-def smooth_path(points, rounded, splits=10):
+def smooth_path(points, rounded, splits=10, cyclic=True):
     ps = points
-    ps = [ps[0],
-          *[ (x, y)
-            for p1, p2, p3 in zip(ps, ps[1:], ps[2:])
-            for x, y in arc_between(p1, p2, p3, rounded, splits) ],
-          ps[-1] ]
-    return ps
+    zps = list(zip(ps, ps[1:], ps[2:]))
+    if cyclic:
+        zps.extend([(ps[-2], ps[-1], ps[0]), (ps[-1], ps[0], ps[1])])
+    ps2 = [ (x, y)
+           for p1, p2, p3 in zps
+           for x, y in arc_between(p1, p2, p3, rounded, splits) ]
+    if not cyclic:
+        ps2.insert(0, ps[0])
+        ps2.append(ps[-1])
+    return ps2
 
 # replace pt2 by a circle arc connected to pt1 and pt2, making it smoother curve
 # rounded is the length of the segments replaced by an arc (on both pt1-pt2 and pt2-pt3)

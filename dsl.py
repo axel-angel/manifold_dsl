@@ -3,7 +3,7 @@
 from . import operators
 from .utils import *
 
-import pymanifold, numpy as np, trimesh
+import pymanifold, trimesh
 from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh as trimesh_export
 from trimesh.exchange.load import load as trimesh_load
