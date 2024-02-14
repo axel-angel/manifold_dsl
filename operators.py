@@ -1,6 +1,6 @@
 #/usr/bin/python
 
-import pymanifold
+import manifold3d
 import numpy as np
 from scipy.spatial import ConvexHull
 from types import SimpleNamespace as N

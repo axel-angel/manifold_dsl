@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import pymanifold
+import manifold3d
 from .utils import *
 from .dsl import Solid
 from functools import partial
@@ -10,10 +10,10 @@ from numpy.linalg import norm
 
 class Surface():
     def __init__(s, other=None):
-        s.crosssection = other or pymanifold.CrossSection()
+        s.crosssection = other or manifold3d.CrossSection()
 
     def from_points(points, *holes):
-        return Surface(pymanifold.CrossSection([points, *holes]))
+        return Surface(manifold3d.CrossSection([points, *holes]))
 
     def extrude(s, h):
         return Solid(s.crosssection.extrude(h))

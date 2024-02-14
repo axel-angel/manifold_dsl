@@ -3,7 +3,7 @@
 from . import operators
 from .utils import *
 
-import pymanifold, trimesh
+import manifold3d, trimesh
 from trimesh import Trimesh
 from trimesh.exchange.export import export_mesh as trimesh_export
 from trimesh.exchange.load import load as trimesh_load
@@ -67,16 +67,16 @@ class Solid():
     fn = 0 # TODO: is this a good idea?
 
     def __init__(s, other=None):
-        s.manifold = other or pymanifold.Manifold()
+        s.manifold = other or manifold3d.Manifold()
 
     # expose Manifold methods
-    def from_mesh(m): return Solid(pymanifold.Manifold.from_mesh(m))
+    def from_mesh(m): return Solid(manifold3d.Manifold(m))
     def from_trimesh(m): return Solid.from_vertices(m.vertices, m.faces)
     def from_stl(path): return Solid.from_trimesh(trimesh_load(path))
     def to_mesh(s): return s.manifold.to_mesh() # TODO: maybe cache if possible?
     def to_trimesh(s, process=False):
         m = s.to_mesh()
-        return Trimesh(vertices=m.vert_pos, faces=m.tri_verts, process=process)
+        return Trimesh(vertices=m.vert_properties, faces=m.tri_verts, process=process)
     def as_original(s): return Solid(s.manifold.as_original())
     def __add__(s, t): return Solid(s.manifold + t.manifold)
     def __sub__(s, t): return Solid(s.manifold - t.manifold)
@@ -84,7 +84,7 @@ class Solid():
 
     # some handy tools
     def from_vertices(vertices, faces): # vertices=positions/points and faces=points indices
-        m = pymanifold.Mesh(vertices.astype(np.float32),
+        m = manifold3d.Mesh(vertices.astype(np.float32),
                             faces.astype(np.int32),
                             # FIXME: Manifold forces Python binding to send arrays here
                             np.empty(shape=(0,0)), np.empty(shape=(0,0)))
@@ -98,7 +98,7 @@ class Solid():
     def vertex(s, orient=''):
         signs = parse_orient(orient)
         v = vector3(signs) # it points to the direction we want
-        vs = s.to_mesh().vert_pos
+        vs = s.to_mesh().vert_properties
         d = ((vs - s.center_point) * v).sum(axis=1)
         idx = np.argmax(d)
         return vs[idx]
@@ -155,8 +155,9 @@ class Solid():
                             else 0
                             for v, sign, min_, max_ in zip(at, signs, *s.bounding_box) ])
 
-    # this returns the min and max points in 3D
-    bounding_box = cached_property(lambda s: np.array(s.manifold.bounding_box).reshape((2,3)))
+    # some useful spatial computed properties
+    # bbox returns the min and max points in each axis
+    bounding_box = cached_property(lambda s: np.array(s.manifold.bounding_box()).reshape((2,3)))
     center_point = cached_property(lambda s: s.bounding_box.mean(axis=0))
     # return the point on the bounding box that satisfying the given orientation
     def extent(s, orient=''): # default to the center, yes an exception: it's inside actually
@@ -177,6 +178,7 @@ class Solid():
              else 0
              for v, sign, min_, max_ in zip(e, signs, *s.bounding_box) ]
         return s.translate(d)
+
     # align object s to overlap other only on the given axes
     # TODO: can we refactor this with next_to?
     def overlap_with(s, other, orient=''):
@@ -202,7 +204,7 @@ class Solid():
 
     def bounding_sphere(s, fn=None):
         c = s.center_point
-        r = norm(s.to_mesh().vert_pos - c, axis=1).max()
+        r = norm(s.to_mesh().vert_properties - c, axis=1).max()
         return Sphere(2*r, fn=fn or Solid.fn).translate(c)
 
     # fit bbox of s to other, not the shape! s.fit_bounding(Sphere()) != s.bounding_sphere()
@@ -222,7 +224,7 @@ class Solid():
 for n in 'cube tetrahedron cylinder sphere smooth'.split():
     (lambda n:
      setattr(Solid, n,
-             lambda *args, **kwargs: Solid(getattr(pymanifold.Manifold, n)(*args, **kwargs))))(n)
+             lambda *args, **kwargs: Solid(getattr(manifold3d.Manifold, n)(*args, **kwargs))))(n)
 
 
 # nice shorthands to create most objects with extra goodies
@@ -294,7 +296,7 @@ intersection = operator_varargs(lambda objects: reduce(and_, objects))
 
 def hull(*args):
     m = union(*args).to_mesh()
-    vertices, faces = operators.hull(m.vert_pos)
+    vertices, faces = operators.hull(m.vert_properties)
     return Solid.from_vertices(vertices, faces)
 
 # allows to place objects next to/on top of each other (see stick_to)
